@@ -1,7 +1,7 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useComplaints } from "@/context/ComplaintContext";
-import { useNotifications } from "@/context/NotificationContext";
+import { useAuth } from "@/context/AuthContext";
+import { createComplaint } from "@/lib/complaints";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -29,168 +29,96 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Camera,
-  MapPin,
-  Upload,
   FileText,
-  User,
+  AlertCircle,
+  CheckCircle,
+  MapPin,
+  Building2,
+  Tag,
+  AlertTriangle,
+  Copy,
   Car,
   Droplets,
   Trash2,
   Zap,
   Lightbulb,
   Shield,
-  AlertCircle,
-  CheckCircle2,
-  Copy,
 } from "lucide-react";
 
 const RegisterComplaint = () => {
   const navigate = useNavigate();
-  const { addComplaint } = useComplaints();
-  const { addNotification } = useNotifications();
-  const [language] = useState("en");
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [complaintId, setComplaintId] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
 
   const [formData, setFormData] = useState({
-    category: "",
-    subcategory: "",
     title: "",
     description: "",
+    category: "",
+    priority: "medium" as "low" | "medium" | "high" | "urgent",
     location: "",
     landmark: "",
-    priority: "medium" as "low" | "medium" | "high",
-    name: "",
-    phone: "",
-    email: "",
-    images: [] as File[],
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [complaintNumber, setComplaintNumber] = useState("");
 
   const categories = [
     {
-      id: "roads",
+      id: "Roads and Infrastructure",
       icon: <Car className="w-5 h-5" />,
-      label: "Roads",
-      subcategories: ["Road Damage", "Potholes", "Traffic Signals"],
+      label: "Roads & Infrastructure",
     },
     {
-      id: "water",
+      id: "Water Supply",
       icon: <Droplets className="w-5 h-5" />,
-      label: "Water",
-      subcategories: ["Water Shortage", "Pipe Leakage", "Water Quality"],
+      label: "Water Supply",
     },
     {
-      id: "sanitation",
+      id: "Garbage Collection",
       icon: <Trash2 className="w-5 h-5" />,
-      label: "Sanitation",
-      subcategories: ["Garbage Collection", "Drainage", "Sewage"],
+      label: "Garbage Collection",
     },
     {
-      id: "electricity",
+      id: "Electricity",
       icon: <Zap className="w-5 h-5" />,
       label: "Electricity",
-      subcategories: ["Power Cut", "Line Fault", "Transformer Issue"],
     },
     {
-      id: "streetlights",
+      id: "Street Lights",
       icon: <Lightbulb className="w-5 h-5" />,
       label: "Street Lights",
-      subcategories: ["Light Not Working", "Pole Damage"],
     },
     {
-      id: "safety",
+      id: "Drainage and Sewerage",
       icon: <Shield className="w-5 h-5" />,
-      label: "Safety",
-      subcategories: [
-        "Vehicle Parking",
-        "Illegal Construction",
-        "Government Property Encroachment",
-      ],
+      label: "Drainage & Sewerage",
+    },
+    {
+      id: "Public Transport",
+      icon: <Car className="w-5 h-5" />,
+      label: "Public Transport",
+    },
+    {
+      id: "Parks and Recreation",
+      icon: <Building2 className="w-5 h-5" />,
+      label: "Parks & Recreation",
+    },
+    {
+      id: "Building Permits",
+      icon: <Building2 className="w-5 h-5" />,
+      label: "Building Permits",
+    },
+    {
+      id: "Noise Pollution",
+      icon: <AlertTriangle className="w-5 h-5" />,
+      label: "Noise Pollution",
+    },
+    {
+      id: "Other",
+      icon: <FileText className="w-5 h-5" />,
+      label: "Other",
     },
   ];
-
-  const convertFilesToBase64 = async (files: File[]): Promise<string[]> => {
-    const promises = files.map((file) => {
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-    });
-    return Promise.all(promises);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setFormData({
-      ...formData,
-      images: [...formData.images, ...files].slice(0, 5),
-    });
-  };
-
-  const removeImage = (index: number) => {
-    const newImages = formData.images.filter((_, i) => i !== index);
-    setFormData({ ...formData, images: newImages });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      // Convert images to base64
-      const imageBase64 = await convertFilesToBase64(formData.images);
-
-      // Submit complaint
-      const id = addComplaint({
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        subcategory: formData.subcategory,
-        location: formData.location,
-        landmark: formData.landmark,
-        priority: formData.priority,
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        images: imageBase64,
-      });
-
-      // Send notification to admins about new complaint
-      addNotification({
-        type: "complaint_submitted",
-        title: "🚨 New Complaint Alert",
-        message: `New ${formData.category.toUpperCase()} complaint: "${formData.title}" submitted by ${formData.name} in ${formData.landmark || formData.location}. Priority: ${formData.priority.toUpperCase()}`,
-        complaintId: id,
-        userId: "all-admins", // Target all admin users
-        userRole: "admin",
-        priority: formData.priority === "high" ? "high" : "medium",
-        actionUrl: "/dashboard",
-      });
-
-      // Also send a general notification for all officials
-      addNotification({
-        type: "complaint_submitted",
-        title: "📋 New Complaint Assigned",
-        message: `${formData.category.charAt(0).toUpperCase() + formData.category.slice(1)} complaint "${formData.title}" needs review. Location: ${formData.landmark || formData.location}`,
-        complaintId: id,
-        userId: "all-officials",
-        userRole: "official",
-        priority: formData.priority === "high" ? "high" : "medium",
-        actionUrl: "/dashboard",
-      });
-
-      setComplaintId(id);
-      setShowSuccessDialog(true);
-    } catch (error) {
-      console.error("Error submitting complaint:", error);
-      alert("Error submitting complaint. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const getCurrentLocation = () => {
     if (navigator.geolocation) {
@@ -204,8 +132,68 @@ const RegisterComplaint = () => {
     }
   };
 
-  const copyComplaintId = () => {
-    navigator.clipboard.writeText(complaintId);
+  const copyComplaintNumber = () => {
+    navigator.clipboard.writeText(complaintNumber);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+
+    if (
+      !formData.title ||
+      !formData.description ||
+      !formData.category ||
+      !formData.location
+    ) {
+      setError("Please fill in all required fields");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!user || user.role !== "citizen") {
+      setError("Only citizens can register complaints");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      console.log("🔄 Submitting complaint...");
+
+      const complaint = await createComplaint(parseInt(user.id), {
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        priority: formData.priority,
+        location: formData.location,
+        landmark: formData.landmark,
+      });
+
+      if (complaint) {
+        setComplaintNumber(complaint.complaint_number);
+        setShowSuccessDialog(true);
+
+        // Reset form
+        setFormData({
+          title: "",
+          description: "",
+          category: "",
+          priority: "medium",
+          location: "",
+          landmark: "",
+        });
+      } else {
+        setError("Failed to register complaint. Please try again.");
+      }
+    } catch (error: any) {
+      console.error("❌ Complaint registration error:", error);
+      setError(
+        error.message || "Failed to register complaint. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDialogClose = () => {
@@ -213,9 +201,32 @@ const RegisterComplaint = () => {
     navigate("/track-complaint");
   };
 
+  if (!user || user.role !== "citizen") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Access Denied
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {!user
+                  ? "Please log in as a citizen to register a complaint."
+                  : "Only citizens can register complaints."}
+              </p>
+              <Button onClick={() => navigate("/login")}>Go to Login</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Simple Navigation */}
+      {/* Navigation */}
       <nav className="bg-white/95 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -241,13 +252,28 @@ const RegisterComplaint = () => {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Register Complaint
-          </h1>
-          <p className="text-lg text-gray-600">
-            Report your civic issue in detail
-          </p>
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center">
+              <FileText className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Register Complaint
+              </h1>
+              <p className="text-gray-600">
+                Submit your civic complaint for prompt resolution
+              </p>
+            </div>
+          </div>
+
+          {/* User Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              <strong>Logged in as:</strong> {user.name} ({user.email}) -{" "}
+              {user.role}
+            </p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -255,14 +281,14 @@ const RegisterComplaint = () => {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
+                <Tag className="w-5 h-5" />
                 Issue Category
               </CardTitle>
               <CardDescription>
-                Choose the category related to your issue
+                Choose the category that best describes your complaint
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {categories.map((category) => (
                   <div
@@ -273,290 +299,159 @@ const RegisterComplaint = () => {
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                     onClick={() =>
-                      setFormData({
-                        ...formData,
-                        category: category.id,
-                        subcategory: "",
-                      })
+                      setFormData({ ...formData, category: category.id })
                     }
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex flex-col items-center text-center space-y-2">
                       {category.icon}
-                      <span className="font-medium">{category.label}</span>
+                      <span className="text-sm font-medium">
+                        {category.label}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
 
-              {formData.category && (
-                <div className="mt-4">
-                  <Label htmlFor="subcategory">Subcategory</Label>
-                  <Select
-                    value={formData.subcategory}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, subcategory: value })
+          {/* Complaint Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Complaint Details
+              </CardTitle>
+              <CardDescription>
+                Please provide detailed information about your complaint
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {error && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-4">
+                {/* Title */}
+                <div>
+                  <Label htmlFor="title">
+                    Complaint Title <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="title"
+                    placeholder="Brief title of your complaint"
+                    value={formData.title}
+                    onChange={(e) =>
+                      setFormData({ ...formData, title: e.target.value })
                     }
+                    required
+                  />
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <Label htmlFor="priority">Priority Level</Label>
+                  <Select
+                    value={formData.priority}
+                    onValueChange={(
+                      value: "low" | "medium" | "high" | "urgent",
+                    ) => setFormData({ ...formData, priority: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select subcategory" />
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-gray-400" />
+                        <SelectValue />
+                      </div>
                     </SelectTrigger>
                     <SelectContent>
-                      {categories
-                        .find((cat) => cat.id === formData.category)
-                        ?.subcategories.map((sub) => (
-                          <SelectItem key={sub} value={sub}>
-                            {sub}
-                          </SelectItem>
-                        ))}
+                      <SelectItem value="low">🟢 Low Priority</SelectItem>
+                      <SelectItem value="medium">🟡 Medium Priority</SelectItem>
+                      <SelectItem value="high">🟠 High Priority</SelectItem>
+                      <SelectItem value="urgent">🔴 Urgent</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Issue Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Issue Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="title">
-                  Issue Title <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="title"
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                  placeholder="Write a brief title"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="description">
-                  Description <span className="text-red-500">*</span>
-                </Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Describe the issue in detail"
-                  rows={4}
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="priority">Priority</Label>
-                <RadioGroup
-                  value={formData.priority}
-                  onValueChange={(value: "low" | "medium" | "high") =>
-                    setFormData({ ...formData, priority: value })
-                  }
-                  className="flex space-x-4 mt-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="low" id="low" />
-                    <Label
-                      htmlFor="low"
-                      className="flex items-center space-x-1"
-                    >
-                      <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                      <span>Low</span>
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="medium" id="medium" />
-                    <Label
-                      htmlFor="medium"
-                      className="flex items-center space-x-1"
-                    >
-                      <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                      <span>Medium</span>
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="high" id="high" />
-                    <Label
-                      htmlFor="high"
-                      className="flex items-center space-x-1"
-                    >
-                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                      <span>High</span>
-                    </Label>
-                  </div>
-                </RadioGroup>
+                {/* Description */}
+                <div>
+                  <Label htmlFor="description">
+                    Detailed Description <span className="text-red-500">*</span>
+                  </Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Provide detailed description of the issue..."
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
+                    rows={5}
+                    required
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    Please be as specific as possible to help us understand and
+                    resolve your complaint quickly.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Location */}
+          {/* Location Details */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="w-5 h-5" />
-                Location
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex space-x-2">
-                <Input
-                  value={formData.location}
-                  onChange={(e) =>
-                    setFormData({ ...formData, location: e.target.value })
-                  }
-                  placeholder="Address or latitude, longitude"
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={getCurrentLocation}
-                >
-                  <MapPin className="w-4 h-4 mr-2" />
-                  My Location
-                </Button>
-              </div>
-
-              <div>
-                <Label htmlFor="landmark">Nearby Landmark</Label>
-                <Input
-                  id="landmark"
-                  value={formData.landmark}
-                  onChange={(e) =>
-                    setFormData({ ...formData, landmark: e.target.value })
-                  }
-                  placeholder="Nearby shop, park or famous place"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Images */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Camera className="w-5 h-5" />
-                Photos
+                Location Information
               </CardTitle>
               <CardDescription>
-                Upload photos related to the issue (max 5)
+                Help us locate the issue precisely
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    id="image-upload"
-                  />
-                  <label htmlFor="image-upload" className="cursor-pointer">
-                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-sm text-gray-600">
-                      Click to select photos or drag them here
-                    </p>
-                  </label>
-                </div>
-
-                {formData.images.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {formData.images.map((image, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={URL.createObjectURL(image)}
-                          alt={`Upload ${index + 1}`}
-                          className="w-full h-32 object-cover rounded-lg"
-                        />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="absolute top-2 right-2 h-6 w-6 p-0"
-                          onClick={() => removeImage(index)}
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    ))}
+                {/* Location */}
+                <div>
+                  <Label htmlFor="location">
+                    Location/Address <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="flex space-x-2">
+                    <Input
+                      id="location"
+                      placeholder="Complete address or coordinates"
+                      value={formData.location}
+                      onChange={(e) =>
+                        setFormData({ ...formData, location: e.target.value })
+                      }
+                      className="flex-1"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={getCurrentLocation}
+                    >
+                      <MapPin className="w-4 h-4 mr-2" />
+                      Current Location
+                    </Button>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Contact Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Contact Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name">
-                    Full Name <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    required
-                  />
                 </div>
 
+                {/* Landmark */}
                 <div>
-                  <Label htmlFor="phone">
-                    Phone Number <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                  <div className="flex-1">
-                    <h4 className="font-medium text-yellow-800">
-                      Privacy Notice
-                    </h4>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      Your personal information will be kept secure and used
-                      only for updates.
-                    </p>
+                  <Label htmlFor="landmark">Nearby Landmark</Label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="landmark"
+                      placeholder="Nearby landmark, building, or shop"
+                      value={formData.landmark}
+                      onChange={(e) =>
+                        setFormData({ ...formData, landmark: e.target.value })
+                      }
+                      className="pl-10"
+                    />
                   </div>
                 </div>
               </div>
@@ -566,19 +461,30 @@ const RegisterComplaint = () => {
           {/* Submit Button */}
           <Card>
             <CardContent className="pt-6">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  <span>Complaint ID will be auto-generated</span>
-                </div>
+              <div className="flex gap-4">
                 <Button
                   type="submit"
-                  size="lg"
-                  className="bg-blue-600 hover:bg-blue-700"
-                  disabled={isSubmitting}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  disabled={isLoading}
                 >
-                  <FileText className="w-5 h-5 mr-2" />
-                  {isSubmitting ? "Submitting..." : "Submit Complaint"}
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Registering Complaint...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Register Complaint
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate("/")}
+                >
+                  Cancel
                 </Button>
               </div>
             </CardContent>
@@ -591,26 +497,26 @@ const RegisterComplaint = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle2 className="w-6 h-6" />
+              <CheckCircle className="w-6 h-6" />
               Complaint Registered Successfully!
             </DialogTitle>
             <DialogDescription>
-              Your complaint has been registered and assigned a tracking ID.
+              Your complaint has been registered and assigned a tracking number.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-lg p-4">
               <Label className="text-sm font-medium text-gray-700">
-                Your Complaint ID
+                Your Complaint Number
               </Label>
               <div className="flex items-center justify-between mt-2">
                 <span className="font-mono text-lg font-bold text-blue-600">
-                  {complaintId}
+                  {complaintNumber}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={copyComplaintId}
+                  onClick={copyComplaintNumber}
                   className="ml-2"
                 >
                   <Copy className="w-4 h-4 mr-1" />
@@ -624,9 +530,9 @@ const RegisterComplaint = () => {
                 <div className="flex-1">
                   <h4 className="font-medium text-blue-800">Important Notes</h4>
                   <ul className="text-sm text-blue-700 mt-1 space-y-1">
-                    <li>• Save this ID to track your complaint status</li>
-                    <li>• You will receive SMS/Email updates</li>
-                    <li>• Expected resolution within 3-5 working days</li>
+                    <li>• Save this number to track your complaint status</li>
+                    <li>• You can check updates using this number</li>
+                    <li>• Expected resolution within 3-7 working days</li>
                   </ul>
                 </div>
               </div>
