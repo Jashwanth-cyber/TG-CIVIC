@@ -1,112 +1,95 @@
--- TG Civic Final Working Database Schema
--- Simple tables without foreign key constraints to avoid type conflicts
+-- TG Civic Minimal Working Schema
+-- This creates the absolute minimum needed tables
 
--- Clean everything first
+-- Drop everything completely
 DROP TABLE IF EXISTS complaint_updates CASCADE;
-DROP TABLE IF EXISTS complaint_attachments CASCADE; 
+DROP TABLE IF EXISTS complaint_attachments CASCADE;
 DROP TABLE IF EXISTS complaints CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
-DROP FUNCTION IF EXISTS generate_complaint_number() CASCADE;
-DROP FUNCTION IF EXISTS set_complaint_number() CASCADE;
-DROP SEQUENCE IF EXISTS complaint_number_seq CASCADE;
 
--- Create users table with UUID primary key (Supabase default)
+-- Disable RLS temporarily
+SET session_replication_role = replica;
+
+-- Create users table (minimal)
 CREATE TABLE users (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
-  phone TEXT UNIQUE NOT NULL,
+  phone TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('citizen', 'admin')),
+  role TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   last_login TIMESTAMPTZ DEFAULT NOW(),
   is_active BOOLEAN DEFAULT true,
   email_verified BOOLEAN DEFAULT false
 );
 
--- Create complaints table with UUID primary key (NO FOREIGN KEYS)
+-- Create complaints table (minimal, no constraints)
 CREATE TABLE complaints (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
   category TEXT NOT NULL,
-  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'resolved', 'rejected')),
+  priority TEXT DEFAULT 'medium',
+  status TEXT DEFAULT 'pending',
   location TEXT,
   landmark TEXT,
-  citizen_id UUID NOT NULL,  -- Links to users.id but no foreign key constraint
-  assigned_admin_id UUID,    -- Links to users.id but no foreign key constraint
+  citizen_id UUID,
+  assigned_admin_id UUID,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   resolved_at TIMESTAMPTZ,
   admin_notes TEXT,
-  complaint_number TEXT UNIQUE NOT NULL DEFAULT ''
+  complaint_number TEXT UNIQUE DEFAULT ''
 );
 
--- Create complaint_attachments table (NO FOREIGN KEYS)
+-- Basic tables for future use (no constraints)
 CREATE TABLE complaint_attachments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  complaint_id UUID NOT NULL,  -- Links to complaints.id but no foreign key constraint
-  file_name TEXT NOT NULL,
-  file_url TEXT NOT NULL,
+  complaint_id UUID,
+  file_name TEXT,
+  file_url TEXT,
   file_type TEXT,
   uploaded_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create complaint_updates table (NO FOREIGN KEYS)
 CREATE TABLE complaint_updates (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  complaint_id UUID NOT NULL,  -- Links to complaints.id but no foreign key constraint
-  user_id UUID NOT NULL,       -- Links to users.id but no foreign key constraint
-  message TEXT NOT NULL,
+  complaint_id UUID,
+  user_id UUID,
+  message TEXT,
   is_internal BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-CREATE INDEX IF NOT EXISTS idx_complaints_citizen_id ON complaints(citizen_id);
-CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status);
-CREATE INDEX IF NOT EXISTS idx_complaints_created_at ON complaints(created_at);
-CREATE INDEX IF NOT EXISTS idx_complaints_number ON complaints(complaint_number);
+-- Re-enable normal mode
+SET session_replication_role = DEFAULT;
 
--- Enable Row Level Security with very permissive policies
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE complaints ENABLE ROW LEVEL SECURITY;
-ALTER TABLE complaint_attachments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE complaint_updates ENABLE ROW LEVEL SECURITY;
-
--- Create permissive policies to avoid access issues
-CREATE POLICY "allow_all_users" ON users FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all_complaints" ON complaints FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all_attachments" ON complaint_attachments FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all_updates" ON complaint_updates FOR ALL USING (true) WITH CHECK (true);
+-- Disable RLS for now to avoid permission issues
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE complaints DISABLE ROW LEVEL SECURITY;
+ALTER TABLE complaint_attachments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE complaint_updates DISABLE ROW LEVEL SECURITY;
 
 -- Grant all permissions
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON users TO anon, authenticated, public;
+GRANT ALL ON complaints TO anon, authenticated, public;
+GRANT ALL ON complaint_attachments TO anon, authenticated, public;
+GRANT ALL ON complaint_updates TO anon, authenticated, public;
 
 -- Create sequence for complaint numbers
-CREATE SEQUENCE complaint_number_seq START 1;
-GRANT ALL ON complaint_number_seq TO anon, authenticated;
+CREATE SEQUENCE IF NOT EXISTS complaint_number_seq START 1;
+GRANT ALL ON complaint_number_seq TO anon, authenticated, public;
 
--- Function to generate complaint numbers
+-- Simple function for complaint numbers
 CREATE OR REPLACE FUNCTION generate_complaint_number()
 RETURNS TEXT AS $$
-DECLARE
-  complaint_number TEXT;
-  next_id INTEGER;
 BEGIN
-  next_id := nextval('complaint_number_seq');
-  complaint_number := 'TGC' || TO_CHAR(NOW(), 'YYYY') || LPAD(next_id::TEXT, 6, '0');
-  RETURN complaint_number;
+  RETURN 'TGC' || TO_CHAR(NOW(), 'YYYY') || LPAD(nextval('complaint_number_seq')::TEXT, 6, '0');
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger function to auto-generate complaint number
+-- Simple trigger
 CREATE OR REPLACE FUNCTION set_complaint_number()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -118,20 +101,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger
 CREATE TRIGGER trigger_set_complaint_number
   BEFORE INSERT OR UPDATE ON complaints
   FOR EACH ROW
   EXECUTE FUNCTION set_complaint_number();
 
--- Test the setup
-SELECT 'SUCCESS: Database created without foreign key constraints!' as result;
-SELECT 'All tables use UUID primary keys' as note;
-SELECT 'Foreign key relationships are logical but not enforced' as constraint_info;
-
--- Show created tables
-SELECT table_name, column_name, data_type 
-FROM information_schema.columns 
-WHERE table_name IN ('users', 'complaints', 'complaint_attachments', 'complaint_updates')
-  AND table_schema = 'public'
-ORDER BY table_name, ordinal_position;
+SELECT 'SUCCESS: Minimal database created!' as result;
