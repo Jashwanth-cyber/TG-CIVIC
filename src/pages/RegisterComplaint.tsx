@@ -161,7 +161,7 @@ const RegisterComplaint = () => {
     try {
       console.log("🔄 Submitting complaint...");
 
-      const complaint = await createComplaint(parseInt(user.id), {
+      const complaint = await createComplaint(user.id, {
         title: formData.title,
         description: formData.description,
         category: formData.category,

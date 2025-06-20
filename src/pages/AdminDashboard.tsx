@@ -145,7 +145,7 @@ const AdminDashboard = () => {
   const getPriorityBadge = (priority: string) => {
     const priorityConfig = {
       low: { label: "🟢 Low", variant: "secondary" as const },
-      medium: { label: "🟡 Medium", variant: "default" as const },
+      medium: { label: "���� Medium", variant: "default" as const },
       high: { label: "🟠 High", variant: "destructive" as const },
       urgent: { label: "🔴 Urgent", variant: "destructive" as const },
     };
@@ -156,7 +156,7 @@ const AdminDashboard = () => {
   };
 
   const handleUpdateComplaint = async (
-    complaintId: number,
+    complaintId: string,
     updates: {
       status?: string;
       admin_notes?: string;

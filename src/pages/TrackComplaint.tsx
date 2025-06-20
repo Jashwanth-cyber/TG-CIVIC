@@ -62,7 +62,7 @@ const TrackComplaint = () => {
     try {
       setIsLoading(true);
       setError("");
-      const citizenComplaints = await getCitizenComplaints(parseInt(user.id));
+      const citizenComplaints = await getCitizenComplaints(user.id);
       setComplaints(citizenComplaints);
       setHasSearched(true);
     } catch (error: any) {
