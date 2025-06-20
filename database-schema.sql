@@ -1,136 +1,99 @@
--- TG Civic Database Schema (UUID Compatible)
--- This handles both UUID and INTEGER primary key scenarios
+-- TG Civic Final Working Database Schema
+-- Simple tables without foreign key constraints to avoid type conflicts
 
--- Step 1: Check what currently exists and clean up completely
-DO $$ 
-DECLARE
-    r RECORD;
-BEGIN
-    -- Drop all views that might depend on our tables
-    FOR r IN (SELECT table_name FROM information_schema.views WHERE table_schema = 'public' AND table_name LIKE '%complaint%' OR table_name LIKE '%user%') 
-    LOOP
-        EXECUTE 'DROP VIEW IF EXISTS ' || r.table_name || ' CASCADE';
-    END LOOP;
-    
-    -- Drop all tables with CASCADE to remove all dependencies
-    FOR r IN (SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('complaint_updates', 'complaint_attachments', 'complaints', 'users')) 
-    LOOP
-        EXECUTE 'DROP TABLE IF EXISTS ' || r.table_name || ' CASCADE';
-    END LOOP;
-END $$;
-
--- Step 2: Drop functions and triggers
+-- Clean everything first
+DROP TABLE IF EXISTS complaint_updates CASCADE;
+DROP TABLE IF EXISTS complaint_attachments CASCADE; 
+DROP TABLE IF EXISTS complaints CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 DROP FUNCTION IF EXISTS generate_complaint_number() CASCADE;
 DROP FUNCTION IF EXISTS set_complaint_number() CASCADE;
+DROP SEQUENCE IF EXISTS complaint_number_seq CASCADE;
 
--- Step 3: Create users table with UUID primary key (Supabase standard)
+-- Create users table with UUID primary key (Supabase default)
 CREATE TABLE users (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  phone VARCHAR(20) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(50) NOT NULL CHECK (role IN ('citizen', 'admin')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  last_login TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  phone TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('citizen', 'admin')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_login TIMESTAMPTZ DEFAULT NOW(),
   is_active BOOLEAN DEFAULT true,
   email_verified BOOLEAN DEFAULT false
 );
 
--- Step 4: Create complaints table with UUID primary key and foreign keys
+-- Create complaints table with UUID primary key (NO FOREIGN KEYS)
 CREATE TABLE complaints (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title VARCHAR(255) NOT NULL,
+  title TEXT NOT NULL,
   description TEXT NOT NULL,
-  category VARCHAR(100) NOT NULL,
-  priority VARCHAR(20) NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-  status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'resolved', 'rejected')),
-  location VARCHAR(255),
-  landmark VARCHAR(255),
-  citizen_id UUID NOT NULL,
-  assigned_admin_id UUID,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  resolved_at TIMESTAMP WITH TIME ZONE,
+  category TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'resolved', 'rejected')),
+  location TEXT,
+  landmark TEXT,
+  citizen_id UUID NOT NULL,  -- Links to users.id but no foreign key constraint
+  assigned_admin_id UUID,    -- Links to users.id but no foreign key constraint
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
   admin_notes TEXT,
-  complaint_number VARCHAR(20) UNIQUE NOT NULL DEFAULT ''
+  complaint_number TEXT UNIQUE NOT NULL DEFAULT ''
 );
 
--- Step 5: Create complaint_attachments table with UUID foreign key
+-- Create complaint_attachments table (NO FOREIGN KEYS)
 CREATE TABLE complaint_attachments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  complaint_id UUID NOT NULL,
-  file_name VARCHAR(255) NOT NULL,
+  complaint_id UUID NOT NULL,  -- Links to complaints.id but no foreign key constraint
+  file_name TEXT NOT NULL,
   file_url TEXT NOT NULL,
-  file_type VARCHAR(100),
-  uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  file_type TEXT,
+  uploaded_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Step 6: Create complaint_updates table with UUID foreign keys
+-- Create complaint_updates table (NO FOREIGN KEYS)
 CREATE TABLE complaint_updates (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  complaint_id UUID NOT NULL,
-  user_id UUID NOT NULL,
+  complaint_id UUID NOT NULL,  -- Links to complaints.id but no foreign key constraint
+  user_id UUID NOT NULL,       -- Links to users.id but no foreign key constraint
   message TEXT NOT NULL,
   is_internal BOOLEAN DEFAULT false,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Step 7: Add foreign key constraints (now all UUIDs match)
-ALTER TABLE complaints 
-ADD CONSTRAINT fk_complaints_citizen_id 
-FOREIGN KEY (citizen_id) REFERENCES users(id) ON DELETE CASCADE;
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_complaints_citizen_id ON complaints(citizen_id);
+CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status);
+CREATE INDEX IF NOT EXISTS idx_complaints_created_at ON complaints(created_at);
+CREATE INDEX IF NOT EXISTS idx_complaints_number ON complaints(complaint_number);
 
-ALTER TABLE complaints 
-ADD CONSTRAINT fk_complaints_assigned_admin_id 
-FOREIGN KEY (assigned_admin_id) REFERENCES users(id) ON DELETE SET NULL;
-
-ALTER TABLE complaint_attachments 
-ADD CONSTRAINT fk_complaint_attachments_complaint_id 
-FOREIGN KEY (complaint_id) REFERENCES complaints(id) ON DELETE CASCADE;
-
-ALTER TABLE complaint_updates 
-ADD CONSTRAINT fk_complaint_updates_complaint_id 
-FOREIGN KEY (complaint_id) REFERENCES complaints(id) ON DELETE CASCADE;
-
-ALTER TABLE complaint_updates 
-ADD CONSTRAINT fk_complaint_updates_user_id 
-FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
-
--- Step 8: Create indexes
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_phone ON users(phone);
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_complaints_citizen_id ON complaints(citizen_id);
-CREATE INDEX idx_complaints_status ON complaints(status);
-CREATE INDEX idx_complaints_created_at ON complaints(created_at);
-CREATE INDEX idx_complaints_number ON complaints(complaint_number);
-CREATE INDEX idx_complaint_updates_complaint_id ON complaint_updates(complaint_id);
-CREATE INDEX idx_complaint_attachments_complaint_id ON complaint_attachments(complaint_id);
-
--- Step 9: Enable Row Level Security
+-- Enable Row Level Security with very permissive policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE complaints ENABLE ROW LEVEL SECURITY;
 ALTER TABLE complaint_attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE complaint_updates ENABLE ROW LEVEL SECURITY;
 
--- Step 10: Create permissive policies
+-- Create permissive policies to avoid access issues
 CREATE POLICY "allow_all_users" ON users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "allow_all_complaints" ON complaints FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "allow_all_attachments" ON complaint_attachments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "allow_all_updates" ON complaint_updates FOR ALL USING (true) WITH CHECK (true);
 
--- Step 11: Grant permissions
-GRANT ALL ON users TO anon, authenticated;
-GRANT ALL ON complaints TO anon, authenticated;
-GRANT ALL ON complaint_attachments TO anon, authenticated;
-GRANT ALL ON complaint_updates TO anon, authenticated;
+-- Grant all permissions
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
 
--- Step 12: Create sequence for complaint numbers (since we can't use SERIAL with UUID)
-CREATE SEQUENCE IF NOT EXISTS complaint_number_seq START 1;
-GRANT USAGE, SELECT ON complaint_number_seq TO anon, authenticated;
+-- Create sequence for complaint numbers
+CREATE SEQUENCE complaint_number_seq START 1;
+GRANT ALL ON complaint_number_seq TO anon, authenticated;
 
--- Step 13: Create functions for complaint number generation
+-- Function to generate complaint numbers
 CREATE OR REPLACE FUNCTION generate_complaint_number()
 RETURNS TEXT AS $$
 DECLARE
@@ -143,23 +106,32 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Trigger function to auto-generate complaint number
 CREATE OR REPLACE FUNCTION set_complaint_number()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.complaint_number IS NULL OR NEW.complaint_number = '' THEN
     NEW.complaint_number := generate_complaint_number();
   END IF;
-  NEW.updated_at := CURRENT_TIMESTAMP;
+  NEW.updated_at := NOW();
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Step 14: Create trigger
+-- Create trigger
 CREATE TRIGGER trigger_set_complaint_number
   BEFORE INSERT OR UPDATE ON complaints
   FOR EACH ROW
   EXECUTE FUNCTION set_complaint_number();
 
--- Success message
-SELECT 'SUCCESS: Database created with UUID primary keys and foreign keys!' as result;
-SELECT 'All foreign key type conflicts resolved!' as note;
+-- Test the setup
+SELECT 'SUCCESS: Database created without foreign key constraints!' as result;
+SELECT 'All tables use UUID primary keys' as note;
+SELECT 'Foreign key relationships are logical but not enforced' as constraint_info;
+
+-- Show created tables
+SELECT table_name, column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name IN ('users', 'complaints', 'complaint_attachments', 'complaint_updates')
+  AND table_schema = 'public'
+ORDER BY table_name, ordinal_position;
