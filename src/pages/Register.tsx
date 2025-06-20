@@ -24,7 +24,15 @@ import {
   User,
   Phone,
   CheckCircle,
+  Shield,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -86,6 +94,7 @@ const Register = () => {
         email: formData.email,
         phone: formData.phone,
         password: formData.password,
+        role: formData.role,
       });
 
       if (success) {
@@ -235,6 +244,41 @@ const Register = () => {
                     required
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">Register as</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value: "citizen" | "admin") =>
+                    setFormData({ ...formData, role: value })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <div className="flex items-center gap-2">
+                      {formData.role === "admin" ? (
+                        <Shield className="h-4 w-4 text-red-600" />
+                      ) : (
+                        <User className="h-4 w-4 text-blue-600" />
+                      )}
+                      <SelectValue placeholder="Select role" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="citizen">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-blue-600" />
+                        <span>Citizen</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-red-600" />
+                        <span>Admin</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
