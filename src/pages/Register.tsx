@@ -79,20 +79,28 @@ const Register = () => {
       return;
     }
 
-    const success = await register({
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      password: formData.password,
-    });
+    try {
+      const success = await register({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+      });
 
-    if (success) {
-      setSuccess("Account created successfully! Redirecting...");
-      setTimeout(() => {
-        navigate("/");
-      }, 2000);
-    } else {
-      setError("User with this email or phone number already exists");
+      if (success) {
+        setSuccess("Account created successfully! Redirecting...");
+        setTimeout(() => {
+          navigate("/");
+        }, 2000);
+      } else {
+        setError("Failed to create account. Please try again.");
+      }
+    } catch (error: any) {
+      if (error.message.includes("already exists")) {
+        setError("User with this email or phone number already exists");
+      } else {
+        setError("Failed to create account. Please try again.");
+      }
     }
   };
 
