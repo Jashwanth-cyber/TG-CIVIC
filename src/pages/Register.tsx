@@ -36,6 +36,7 @@ const Register = () => {
     phone: "",
     password: "",
     confirmPassword: "",
+    role: "citizen" as "citizen" | "admin",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
