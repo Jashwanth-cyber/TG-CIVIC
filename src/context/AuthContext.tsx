@@ -34,6 +34,7 @@ interface AuthContextType {
     email: string;
     phone: string;
     password: string;
+    role: "citizen" | "admin";
   }) => Promise<boolean>;
   logout: () => void;
   updateProfile: (updates: Partial<User>) => Promise<boolean>;
@@ -121,6 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     email: string;
     phone: string;
     password: string;
+    role: "citizen" | "admin";
   }): Promise<boolean> => {
     setIsLoading(true);
 
