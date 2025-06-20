@@ -50,12 +50,20 @@ const Login = () => {
       return;
     }
 
-    const success = await login(formData.email, formData.password);
+    try {
+      const success = await login(formData.email, formData.password);
 
-    if (success) {
-      navigate(from, { replace: true });
-    } else {
-      setError("Invalid email or password");
+      if (success) {
+        navigate(from, { replace: true });
+      } else {
+        setError("Invalid email or password");
+      }
+    } catch (error: any) {
+      if (error.message.includes("deactivated")) {
+        setError("Your account has been deactivated. Please contact support.");
+      } else {
+        setError("Login failed. Please try again.");
+      }
     }
   };
 
