@@ -50,45 +50,21 @@ const Login = () => {
       return;
     }
 
-    const success = await login(formData.email, formData.password);
+    try {
+      const success = await login(formData.email, formData.password);
 
-    if (success) {
-      navigate(from, { replace: true });
-    } else {
-      setError("Invalid email or password");
+      if (success) {
+        navigate(from, { replace: true });
+      } else {
+        setError("Invalid email or password");
+      }
+    } catch (error: any) {
+      if (error.message.includes("deactivated")) {
+        setError("Your account has been deactivated. Please contact support.");
+      } else {
+        setError("Login failed. Please try again.");
+      }
     }
-  };
-
-  const demoAccounts = [
-    {
-      role: "Admin",
-      email: "admin@tgcivic.gov.in",
-      password: "admin123",
-      description: "Full access to dashboard and management",
-      icon: <Shield className="w-4 h-4" />,
-      color: "bg-red-100 text-red-800",
-    },
-    {
-      role: "Citizen",
-      email: "rajesh@email.com",
-      password: "citizen123",
-      description: "Register and track complaints",
-      icon: <User className="w-4 h-4" />,
-      color: "bg-blue-100 text-blue-800",
-    },
-    {
-      role: "Official",
-      email: "officer@ghmc.gov.in",
-      password: "official123",
-      description: "Manage assigned complaints",
-      icon: <Users className="w-4 h-4" />,
-      color: "bg-green-100 text-green-800",
-    },
-  ];
-
-  const fillDemoCredentials = (email: string, password: string) => {
-    setFormData({ email, password });
-    setError("");
   };
 
   return (
@@ -106,51 +82,6 @@ const Login = () => {
             Sign in to access TG Civic services
           </p>
         </div>
-
-        {/* Demo Accounts */}
-        <Card className="bg-blue-50 border-blue-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-blue-900">
-              Demo Accounts
-            </CardTitle>
-            <CardDescription className="text-blue-700">
-              Click to auto-fill credentials
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {demoAccounts.map((account, index) => (
-              <div
-                key={index}
-                onClick={() =>
-                  fillDemoCredentials(account.email, account.password)
-                }
-                className="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200 cursor-pointer hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className={`p-1.5 rounded-md ${account.color}`}>
-                    {account.icon}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">
-                      {account.role}
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      {account.description}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-mono text-gray-600">
-                    {account.email}
-                  </p>
-                  <p className="text-xs font-mono text-gray-500">
-                    {account.password}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
 
         {/* Login Form */}
         <Card>

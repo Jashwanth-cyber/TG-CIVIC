@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { useComplaints } from "@/context/ComplaintContext";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { getCitizenComplaints, type Complaint } from "@/lib/complaints";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,13 +12,16 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Search,
   Clock,
@@ -30,130 +35,122 @@ import {
   Eye,
   Phone,
   Mail,
-  Camera,
   History,
-  MapPinIcon,
   XCircle,
+  RefreshCw,
+  Plus,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 const TrackComplaint = () => {
   const navigate = useNavigate();
-  const { complaints, getComplaintById, getComplaintsByPhone } =
-    useComplaints();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState(complaints.slice(0, 5));
-  const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
-  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const { user } = useAuth();
 
-  const handleSearch = () => {
-    if (!searchTerm.trim()) {
-      setSearchResults(complaints.slice(0, 5));
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(
+    null,
+  );
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const fetchComplaints = async () => {
+    if (!user || user.role !== "citizen") {
+      setError("Please log in as a citizen to track complaints");
       return;
     }
 
-    // Search by complaint ID or phone number
-    let results = [];
-
-    if (searchTerm.startsWith("TSC")) {
-      // Search by complaint ID
-      const complaint = getComplaintById(searchTerm);
-      results = complaint ? [complaint] : [];
-    } else if (/^\d{10}$/.test(searchTerm)) {
-      // Search by phone number (10 digits)
-      results = getComplaintsByPhone(searchTerm);
-    } else {
-      // Search in all fields
-      results = complaints.filter(
-        (complaint) =>
-          complaint.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          complaint.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          complaint.description
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          complaint.phone.includes(searchTerm),
-      );
+    try {
+      setIsLoading(true);
+      setError("");
+      const citizenComplaints = await getCitizenComplaints(user.id);
+      setComplaints(citizenComplaints);
+      setHasSearched(true);
+    } catch (error: any) {
+      console.error("❌ Error fetching complaints:", error);
+      setError(error.message || "Failed to fetch complaints");
+    } finally {
+      setIsLoading(false);
     }
-
-    setSearchResults(results);
   };
 
-  const viewComplaintDetails = (complaint: any) => {
-    setSelectedComplaint(complaint);
-    setShowDetailsDialog(true);
+  const getStatusBadge = (status: string) => {
+    const statusConfig = {
+      pending: {
+        label: "Pending",
+        variant: "secondary" as const,
+        icon: <Clock className="w-3 h-3" />,
+      },
+      in_progress: {
+        label: "In Progress",
+        variant: "default" as const,
+        icon: <RefreshCw className="w-3 h-3" />,
+      },
+      resolved: {
+        label: "Resolved",
+        variant: "success" as const,
+        icon: <CheckCircle className="w-3 h-3" />,
+      },
+      rejected: {
+        label: "Rejected",
+        variant: "destructive" as const,
+        icon: <XCircle className="w-3 h-3" />,
+      },
+    };
+    const config =
+      statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
+    return (
+      <Badge variant={config.variant} className="flex items-center gap-1">
+        {config.icon}
+        {config.label}
+      </Badge>
+    );
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "resolved":
-        return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case "in-progress":
-        return <Clock className="w-4 h-4 text-blue-600" />;
-      case "assigned":
-        return <User className="w-4 h-4 text-yellow-600" />;
-      case "pending":
-        return <AlertCircle className="w-4 h-4 text-orange-600" />;
-      case "closed":
-        return <XCircle className="w-4 h-4 text-gray-600" />;
-      default:
-        return <AlertCircle className="w-4 h-4 text-red-600" />;
-    }
+  const getPriorityBadge = (priority: string) => {
+    const priorityConfig = {
+      low: { label: "🟢 Low", variant: "secondary" as const },
+      medium: { label: "🟡 Medium", variant: "default" as const },
+      high: { label: "🟠 High", variant: "destructive" as const },
+      urgent: { label: "🔴 Urgent", variant: "destructive" as const },
+    };
+    const config =
+      priorityConfig[priority as keyof typeof priorityConfig] ||
+      priorityConfig.medium;
+    return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "resolved":
-        return "bg-green-100 text-green-800 border-green-200";
-      case "in-progress":
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case "assigned":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      case "pending":
-        return "bg-orange-100 text-orange-800 border-orange-200";
-      case "closed":
-        return "bg-gray-100 text-gray-800 border-gray-200";
-      default:
-        return "bg-red-100 text-red-800 border-red-200";
-    }
+    const colors = {
+      pending: "bg-orange-100 border-orange-300",
+      in_progress: "bg-blue-100 border-blue-300",
+      resolved: "bg-green-100 border-green-300",
+      rejected: "bg-red-100 border-red-300",
+    };
+    return colors[status as keyof typeof colors] || colors.pending;
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "bg-red-100 text-red-800 border-red-200";
-      case "medium":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      default:
-        return "bg-green-100 text-green-800 border-green-200";
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const getStatusDisplayName = (status: string) => {
-    switch (status) {
-      case "in-progress":
-        return "In Progress";
-      case "assigned":
-        return "Assigned";
-      case "pending":
-        return "Pending";
-      case "resolved":
-        return "Resolved";
-      case "closed":
-        return "Closed";
-      default:
-        return status;
-    }
-  };
+  if (!user || user.role !== "citizen") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Access Denied
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {!user
+                  ? "Please log in as a citizen to track complaints."
+                  : "Only citizens can track complaints."}
+              </p>
+              <Button onClick={() => navigate("/login")}>Go to Login</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -170,443 +167,425 @@ const TrackComplaint = () => {
                   TG Civic
                 </span>
                 <span className="text-xs text-gray-600 ml-2">
-                  Track Complaint
+                  Track Complaints
                 </span>
               </div>
             </div>
-            <Button variant="outline" onClick={() => navigate("/")}>
-              Back to Home
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                onClick={() => navigate("/register-complaint")}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Complaint
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/")}>
+                Back to Home
+              </Button>
+            </div>
           </div>
         </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Track Your Complaint
-          </h1>
-          <p className="text-lg text-gray-600">
-            Enter your complaint ID or phone number to check status
-          </p>
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center">
+              <Search className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Track Your Complaints
+              </h1>
+              <p className="text-gray-600">
+                View the status and progress of your submitted complaints
+              </p>
+            </div>
+          </div>
+
+          {/* User Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              <strong>Logged in as:</strong> {user.name} ({user.email})
+            </p>
+          </div>
         </div>
 
         {/* Search Section */}
         <Card className="mb-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Search className="w-5 h-5" />
-              Search Complaint
+              <FileText className="w-5 h-5" />
+              Your Complaints
             </CardTitle>
             <CardDescription>
-              Enter your complaint ID (e.g., TSC2024001234) or registered phone
-              number
+              Load and view all your submitted complaints
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex space-x-4">
-              <Input
-                placeholder="Complaint ID or Phone Number"
-                className="flex-1"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-              />
-              <Button
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={handleSearch}
-              >
-                <Search className="w-4 h-4 mr-2" />
-                Search
+            <div className="flex items-center gap-4">
+              <Button onClick={fetchComplaints} disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Load My Complaints
+                  </>
+                )}
               </Button>
+              {hasSearched && (
+                <p className="text-sm text-gray-600">
+                  Found {complaints.length} complaint(s)
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
 
+        {/* Error Display */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Results */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">
-              {searchTerm
-                ? `Search Results (${searchResults.length})`
-                : "Recent Complaints"}
-            </h2>
-            {searchTerm && searchResults.length === 0 && (
-              <Badge variant="secondary">No complaints found</Badge>
-            )}
-          </div>
-
-          {searchResults.length === 0 && searchTerm ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No complaints found
-                </h3>
-                <p className="text-gray-600">
-                  Please check your complaint ID or phone number and try again.
-                </p>
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSearchResults(complaints.slice(0, 5));
-                  }}
-                >
-                  Show All Complaints
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            searchResults.map((complaint) => (
-              <Card
-                key={complaint.id}
-                className="hover:shadow-lg transition-shadow"
-              >
-                <CardContent className="p-6">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                        <span className="font-mono text-sm text-blue-600 font-medium">
-                          {complaint.id}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={getPriorityColor(complaint.priority)}
-                        >
-                          {complaint.priority.toUpperCase()}
-                        </Badge>
-                      </div>
-
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {complaint.title}
-                      </h3>
-
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-3">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4" />
-                          {complaint.landmark ||
-                            complaint.location.split(",")[0]}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {formatDate(complaint.createdAt)}
-                        </div>
-                        <Badge variant="secondary">
-                          {complaint.subcategory}
-                        </Badge>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Status:</span>
-                        <Badge className={getStatusColor(complaint.status)}>
-                          <span className="flex items-center gap-1">
-                            {getStatusIcon(complaint.status)}
-                            {getStatusDisplayName(complaint.status)}
-                          </span>
-                        </Badge>
-                        {complaint.assignedTo && (
-                          <span className="text-sm text-gray-600">
-                            • Assigned to {complaint.assignedTo}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => viewComplaintDetails(complaint)}
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        View Details
-                      </Button>
-                    </div>
+        {hasSearched && (
+          <div className="space-y-6">
+            {complaints.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center py-8">
+                    <FileText className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      No Complaints Found
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      You haven't registered any complaints yet.
+                    </p>
+                    <Button onClick={() => navigate("/register-complaint")}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Register Your First Complaint
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
-            ))
-          )}
-        </div>
-
-        {/* Help Section */}
-        <Card className="mt-8 bg-blue-50 border-blue-200">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2">Need Help?</h3>
-                <p className="text-gray-600 mb-4">
-                  If you can't find your complaint or need assistance, please
-                  contact our support team.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button variant="outline" size="sm">
-                    <User className="w-4 h-4 mr-2" />
-                    Live Chat Support
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <Phone className="w-4 h-4 mr-2" />
-                    Call Helpline: 1800-XXX-XXXX
+            ) : (
+              <div className="grid gap-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Your Complaints ({complaints.length})
+                  </h2>
+                  <Button variant="outline" onClick={fetchComplaints} size="sm">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
                   </Button>
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Complaint Details Dialog */}
-      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          {selectedComplaint && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <FileText className="w-6 h-6 text-blue-600" />
-                  Complaint Details
-                </DialogTitle>
-                <DialogDescription>
-                  Complete information about complaint {selectedComplaint.id}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-6">
-                {/* Header Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700">
-                      Complaint ID
-                    </Label>
-                    <p className="font-mono text-lg font-bold text-blue-600">
-                      {selectedComplaint.id}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700">
-                      Current Status
-                    </Label>
-                    <div className="mt-1">
-                      <Badge
-                        className={getStatusColor(selectedComplaint.status)}
-                      >
-                        {getStatusIcon(selectedComplaint.status)}
-                        <span className="ml-1">
-                          {getStatusDisplayName(selectedComplaint.status)}
-                        </span>
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Issue Details */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Issue Details
-                  </h3>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">
-                      {selectedComplaint.title}
-                    </h4>
-                    <p className="text-gray-700 mb-3">
-                      {selectedComplaint.description}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary">
-                        {selectedComplaint.subcategory}
-                      </Badge>
-                      <Badge
-                        className={getPriorityColor(selectedComplaint.priority)}
-                      >
-                        {selectedComplaint.priority.toUpperCase()} Priority
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Location */}
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Location
-                  </h3>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-start gap-2">
-                      <MapPinIcon className="w-5 h-5 text-gray-600 mt-0.5" />
-                      <div>
-                        <p className="text-gray-900">
-                          {selectedComplaint.location}
-                        </p>
-                        {selectedComplaint.landmark && (
-                          <p className="text-gray-600 text-sm">
-                            Near: {selectedComplaint.landmark}
+                {complaints.map((complaint) => (
+                  <Card
+                    key={complaint.id}
+                    className={`border-l-4 ${getStatusColor(complaint.status)}`}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <CardTitle className="text-lg">
+                              {complaint.title}
+                            </CardTitle>
+                            {getStatusBadge(complaint.status)}
+                            {getPriorityBadge(complaint.priority)}
+                          </div>
+                          <p className="text-sm text-gray-600 font-mono">
+                            #{complaint.complaint_number}
                           </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Contact Information */}
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Contact Information
-                  </h3>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-600" />
-                        <span className="text-gray-900">
-                          {selectedComplaint.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-gray-600" />
-                        <span className="text-gray-900">
-                          {selectedComplaint.phone}
-                        </span>
-                      </div>
-                      {selectedComplaint.email && (
-                        <div className="flex items-center gap-2">
-                          <Mail className="w-4 h-4 text-gray-600" />
-                          <span className="text-gray-900">
-                            {selectedComplaint.email}
-                          </span>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Images */}
-                {selectedComplaint.images &&
-                  selectedComplaint.images.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Images
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {selectedComplaint.images.map(
-                          (image: string, index: number) => (
-                            <div key={index} className="relative">
-                              <img
-                                src={image}
-                                alt={`Evidence ${index + 1}`}
-                                className="w-full h-32 object-cover rounded-lg border"
-                              />
-                            </div>
-                          ),
-                        )}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedComplaint(complaint)}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
+                            </Button>
+                          </DialogTrigger>
+                          <ComplaintDetailsDialog
+                            complaint={selectedComplaint}
+                          />
+                        </Dialog>
                       </div>
-                    </div>
-                  )}
-
-                {/* Assignment Info */}
-                {selectedComplaint.assignedTo && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Assignment Information
-                    </h3>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Building2 className="w-4 h-4 text-blue-600" />
-                        <span className="font-medium text-blue-900">
-                          Assigned to: {selectedComplaint.assignedTo}
-                        </span>
-                      </div>
-                      {selectedComplaint.estimatedResolution && (
-                        <p className="text-blue-700 text-sm">
-                          Expected Resolution:{" "}
-                          {new Date(
-                            selectedComplaint.estimatedResolution,
-                          ).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Resolution Notes */}
-                {selectedComplaint.resolutionNotes && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Resolution Notes
-                    </h3>
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-green-800">
-                        {selectedComplaint.resolutionNotes}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* History */}
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <History className="w-5 h-5" />
-                    Status History
-                  </h3>
-                  <div className="space-y-3">
-                    {selectedComplaint.history.map(
-                      (entry: any, index: number) => (
-                        <div key={index} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              {getStatusIcon(entry.status)}
-                              <span className="font-medium text-gray-900">
-                                {getStatusDisplayName(entry.status)}
-                              </span>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Building2 className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium">Category:</span>
+                            <span>{complaint.category}</span>
+                          </div>
+                          <div className="flex items-start gap-2 text-sm">
+                            <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
+                            <div>
+                              <span className="font-medium">Location:</span>
+                              <p className="text-gray-600">
+                                {complaint.location}
+                              </p>
+                              {complaint.landmark && (
+                                <p className="text-gray-500 text-xs">
+                                  Near: {complaint.landmark}
+                                </p>
+                              )}
                             </div>
-                            <span className="text-sm text-gray-600">
-                              {formatDate(entry.timestamp)}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium">Registered:</span>
+                            <span>
+                              {new Date(
+                                complaint.created_at,
+                              ).toLocaleDateString()}
                             </span>
                           </div>
-                          <p className="text-gray-700 text-sm">{entry.notes}</p>
-                          <p className="text-gray-600 text-xs mt-1">
-                            Updated by: {entry.updatedBy}
+                          <div className="flex items-center gap-2 text-sm">
+                            <History className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium">Last Updated:</span>
+                            <span>
+                              {new Date(
+                                complaint.updated_at,
+                              ).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-700 line-clamp-2">
+                          {complaint.description}
+                        </p>
+                      </div>
+                      {complaint.admin_notes && (
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <User className="w-4 h-4 text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">
+                              Admin Notes:
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            {complaint.admin_notes}
                           </p>
                         </div>
-                      ),
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex justify-end space-x-3 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowDetailsDialog(false)}
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setShowDetailsDialog(false);
-                      navigate("/register-complaint");
-                    }}
-                  >
-                    Register New Complaint
-                  </Button>
-                </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
-const Label = ({ className, children, ...props }: any) => (
-  <label
-    className={`text-sm font-medium text-gray-700 ${className || ""}`}
-    {...props}
-  >
-    {children}
-  </label>
-);
+// Complaint Details Dialog Component
+const ComplaintDetailsDialog = ({
+  complaint,
+}: {
+  complaint: Complaint | null;
+}) => {
+  if (!complaint) return null;
+
+  return (
+    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <FileText className="w-5 h-5" />
+          Complaint Details - {complaint.complaint_number}
+        </DialogTitle>
+        <DialogDescription>
+          Complete information about your complaint
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-6">
+        {/* Status and Priority */}
+        <div className="flex items-center gap-4">
+          <div>
+            <Label className="text-sm font-medium text-gray-700">Status</Label>
+            <div className="mt-1">
+              <Badge
+                variant={
+                  complaint.status === "resolved"
+                    ? "success"
+                    : complaint.status === "rejected"
+                      ? "destructive"
+                      : "secondary"
+                }
+              >
+                {complaint.status === "pending" && (
+                  <Clock className="w-3 h-3 mr-1" />
+                )}
+                {complaint.status === "in_progress" && (
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                )}
+                {complaint.status === "resolved" && (
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                )}
+                {complaint.status === "rejected" && (
+                  <XCircle className="w-3 h-3 mr-1" />
+                )}
+                {complaint.status.replace("_", " ").toUpperCase()}
+              </Badge>
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm font-medium text-gray-700">
+              Priority
+            </Label>
+            <div className="mt-1">
+              <Badge
+                variant={
+                  complaint.priority === "high" ||
+                  complaint.priority === "urgent"
+                    ? "destructive"
+                    : "secondary"
+                }
+              >
+                {complaint.priority === "low" && "🟢"}
+                {complaint.priority === "medium" && "🟡"}
+                {complaint.priority === "high" && "🟠"}
+                {complaint.priority === "urgent" && "🔴"}
+                <span className="ml-1 capitalize">{complaint.priority}</span>
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {/* Basic Information */}
+        <div className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium text-gray-700">Title</Label>
+            <p className="text-sm mt-1">{complaint.title}</p>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium text-gray-700">
+              Description
+            </Label>
+            <p className="text-sm mt-1 bg-gray-50 p-3 rounded">
+              {complaint.description}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium text-gray-700">
+                Category
+              </Label>
+              <p className="text-sm mt-1">{complaint.category}</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-gray-700">
+                Complaint Number
+              </Label>
+              <p className="text-sm mt-1 font-mono">
+                {complaint.complaint_number}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Location Information */}
+        <div className="space-y-3">
+          <h4 className="font-medium flex items-center gap-2">
+            <MapPin className="w-4 h-4" />
+            Location Information
+          </h4>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-sm font-medium text-gray-700">
+                Address
+              </Label>
+              <p className="text-sm mt-1">{complaint.location}</p>
+            </div>
+            {complaint.landmark && (
+              <div>
+                <Label className="text-sm font-medium text-gray-700">
+                  Nearby Landmark
+                </Label>
+                <p className="text-sm mt-1">{complaint.landmark}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Timeline */}
+        <div className="space-y-3">
+          <h4 className="font-medium flex items-center gap-2">
+            <History className="w-4 h-4" />
+            Timeline
+          </h4>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <div>
+                <p className="font-medium">Complaint Registered</p>
+                <p className="text-gray-500">
+                  {new Date(complaint.created_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            {complaint.updated_at !== complaint.created_at && (
+              <div className="flex items-center gap-3 text-sm">
+                <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                <div>
+                  <p className="font-medium">Last Updated</p>
+                  <p className="text-gray-500">
+                    {new Date(complaint.updated_at).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
+            {complaint.resolved_at && (
+              <div className="flex items-center gap-3 text-sm">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <div>
+                  <p className="font-medium">Resolved</p>
+                  <p className="text-gray-500">
+                    {new Date(complaint.resolved_at).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Admin Notes */}
+        {complaint.admin_notes && (
+          <div className="space-y-3">
+            <h4 className="font-medium flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Admin Notes
+            </h4>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">{complaint.admin_notes}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </DialogContent>
+  );
+};
 
 export default TrackComplaint;

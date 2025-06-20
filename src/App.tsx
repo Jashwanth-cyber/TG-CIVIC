@@ -15,6 +15,7 @@ import Register from "./pages/Register";
 import RegisterComplaint from "./pages/RegisterComplaint";
 import TrackComplaint from "./pages/TrackComplaint";
 import Dashboard from "./pages/Dashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
@@ -55,6 +56,14 @@ const App = () => (
                     element={
                       <ProtectedRoute requiredRole={["admin", "official"]}>
                         <Dashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin"
+                    element={
+                      <ProtectedRoute requiredRole={["admin"]}>
+                        <AdminDashboard />
                       </ProtectedRoute>
                     }
                   />

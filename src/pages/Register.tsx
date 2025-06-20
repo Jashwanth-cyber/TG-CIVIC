@@ -24,7 +24,15 @@ import {
   User,
   Phone,
   CheckCircle,
+  Shield,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -36,6 +44,7 @@ const Register = () => {
     phone: "",
     password: "",
     confirmPassword: "",
+    role: "citizen" as "citizen" | "admin",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -79,20 +88,29 @@ const Register = () => {
       return;
     }
 
-    const success = await register({
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      password: formData.password,
-    });
+    try {
+      const success = await register({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: formData.role,
+      });
 
-    if (success) {
-      setSuccess("Account created successfully! Redirecting...");
-      setTimeout(() => {
-        navigate("/");
-      }, 2000);
-    } else {
-      setError("User with this email or phone number already exists");
+      if (success) {
+        setSuccess("Account created successfully! Redirecting...");
+        setTimeout(() => {
+          navigate("/");
+        }, 2000);
+      } else {
+        setError("Failed to create account. Please try again.");
+      }
+    } catch (error: any) {
+      if (error.message.includes("already exists")) {
+        setError("User with this email or phone number already exists");
+      } else {
+        setError("Failed to create account. Please try again.");
+      }
     }
   };
 
@@ -226,6 +244,41 @@ const Register = () => {
                     required
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">Register as</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value: "citizen" | "admin") =>
+                    setFormData({ ...formData, role: value })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <div className="flex items-center gap-2">
+                      {formData.role === "admin" ? (
+                        <Shield className="h-4 w-4 text-red-600" />
+                      ) : (
+                        <User className="h-4 w-4 text-blue-600" />
+                      )}
+                      <SelectValue placeholder="Select role" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="citizen">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-blue-600" />
+                        <span>Citizen</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-red-600" />
+                        <span>Admin</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
