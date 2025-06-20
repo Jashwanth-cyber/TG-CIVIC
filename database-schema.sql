@@ -1,8 +1,14 @@
 -- TG Civic Complete Database Schema
 -- Run this in your Supabase SQL Editor
 
--- Create users table (if not exists)
-CREATE TABLE IF NOT EXISTS users (
+-- Drop existing tables if they exist (to fix type issues)
+DROP TABLE IF EXISTS complaint_updates CASCADE;
+DROP TABLE IF EXISTS complaint_attachments CASCADE;
+DROP TABLE IF EXISTS complaints CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+-- Create users table
+CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
@@ -16,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Create complaints table
-CREATE TABLE IF NOT EXISTS complaints (
+CREATE TABLE complaints (
   id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   description TEXT NOT NULL,
@@ -31,11 +37,11 @@ CREATE TABLE IF NOT EXISTS complaints (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   resolved_at TIMESTAMP WITH TIME ZONE,
   admin_notes TEXT,
-  complaint_number VARCHAR(20) UNIQUE NOT NULL
+  complaint_number VARCHAR(20) UNIQUE NOT NULL DEFAULT ''
 );
 
 -- Create complaint attachments table
-CREATE TABLE IF NOT EXISTS complaint_attachments (
+CREATE TABLE complaint_attachments (
   id SERIAL PRIMARY KEY,
   complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
   file_name VARCHAR(255) NOT NULL,
@@ -45,7 +51,7 @@ CREATE TABLE IF NOT EXISTS complaint_attachments (
 );
 
 -- Create complaint updates/comments table
-CREATE TABLE IF NOT EXISTS complaint_updates (
+CREATE TABLE complaint_updates (
   id SERIAL PRIMARY KEY,
   complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -107,23 +113,20 @@ GRANT ALL ON complaint_attachments TO anon;
 GRANT ALL ON complaint_updates TO authenticated;
 GRANT ALL ON complaint_updates TO anon;
 
--- Grant sequence permissions
-GRANT USAGE, SELECT ON SEQUENCE users_id_seq TO anon;
-GRANT USAGE, SELECT ON SEQUENCE users_id_seq TO authenticated;
-GRANT USAGE, SELECT ON SEQUENCE complaints_id_seq TO anon;
-GRANT USAGE, SELECT ON SEQUENCE complaints_id_seq TO authenticated;
-GRANT USAGE, SELECT ON SEQUENCE complaint_attachments_id_seq TO anon;
-GRANT USAGE, SELECT ON SEQUENCE complaint_attachments_id_seq TO authenticated;
-GRANT USAGE, SELECT ON SEQUENCE complaint_updates_id_seq TO anon;
-GRANT USAGE, SELECT ON SEQUENCE complaint_updates_id_seq TO authenticated;
+-- Grant sequence permissions (use ALL SEQUENCES to avoid naming issues)
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
 -- Function to generate complaint number
 CREATE OR REPLACE FUNCTION generate_complaint_number()
 RETURNS TEXT AS $$
 DECLARE
   complaint_number TEXT;
+  next_id INTEGER;
 BEGIN
-  complaint_number := 'TGC' || TO_CHAR(NOW(), 'YYYY') || LPAD(nextval('complaints_id_seq')::TEXT, 6, '0');
+  -- Get the next ID that will be used
+  SELECT COALESCE(MAX(id), 0) + 1 INTO next_id FROM complaints;
+  complaint_number := 'TGC' || TO_CHAR(NOW(), 'YYYY') || LPAD(next_id::TEXT, 6, '0');
   RETURN complaint_number;
 END;
 $$ LANGUAGE plpgsql;
